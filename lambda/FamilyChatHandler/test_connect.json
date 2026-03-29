@@ -1,0 +1,20 @@
+{
+    "requestContext": {
+        "routeKey": "$connect",
+        "connectionId": "abc123TEST=",
+        "eventType": "CONNECT",
+        "requestId": "test-req-001",
+        "domainName": "xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com",
+        "stage": "prod"
+    },
+    "queryStringParameters": {
+        "userId": "child",
+        "token": "eyJraWQiOiJEVW..."
+    },
+    "headers": {
+        "Host": "xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com",
+        "Origin": "https://your-cloudfront-domain.cloudfront.net"
+    },
+    "multiValueHeaders": {},
+    "isBase64Encoded": false
+}

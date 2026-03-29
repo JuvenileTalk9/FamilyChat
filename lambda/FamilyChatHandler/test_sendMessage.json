@@ -1,0 +1,12 @@
+{
+    "requestContext": {
+        "routeKey": "sendMessage",
+        "connectionId": "abc123TEST=",
+        "eventType": "MESSAGE",
+        "requestId": "test-req-003",
+        "domainName": "xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com",
+        "stage": "prod"
+    },
+    "body": "{\"action\":\"sendMessage\",\"text\":\"ただいま！おやつたべていい？\",\"isStamp\":false}",
+    "isBase64Encoded": false
+}

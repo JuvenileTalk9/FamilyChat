@@ -1,0 +1,1359 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>かぞくチャット</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    /* ===== RESET & BASE ===== */
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --sky: #E8F4FD;
+      --sky-mid: #C5E3F7;
+      --cloud: #FFFFFF;
+      --grass: #D4EDDA;
+      --sun: #FFD166;
+      --sun-dark: #F4A426;
+      --coral: #FF6B6B;
+      --coral-dk: #E85555;
+      --mint: #4ECDC4;
+      --mint-dk: #38B2AA;
+      --lavender: #C9B8F0;
+      --lav-dk: #9B86D9;
+      --papa: #5B9BD5;
+      --papa-dk: #3A7FC1;
+      --mama: #E87BAC;
+      --mama-dk: #D45590;
+      --child: #66BB6A;
+      --child-dk: #43A047;
+      --text: #3A3A5C;
+      --text-muted: #7A7A9A;
+      --shadow: rgba(90, 90, 140, 0.12);
+      --radius-xl: 24px;
+      --radius-lg: 18px;
+      --radius-md: 12px;
+    }
+
+    html,
+    body {
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Nunito', sans-serif;
+      background: var(--sky);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ===== BACKGROUND DECORATION ===== */
+    .bg-deco {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
+    }
+
+    .cloud-shape {
+      position: absolute;
+      background: white;
+      border-radius: 50px;
+      opacity: 0.55;
+      animation: float linear infinite;
+    }
+
+    .cloud-shape::before,
+    .cloud-shape::after {
+      content: '';
+      position: absolute;
+      background: white;
+      border-radius: 50%;
+    }
+
+    .c1 {
+      width: 120px;
+      height: 40px;
+      top: 6%;
+      left: -5%;
+      animation-duration: 40s;
+    }
+
+    .c1::before {
+      width: 56px;
+      height: 56px;
+      top: -28px;
+      left: 16px;
+    }
+
+    .c1::after {
+      width: 40px;
+      height: 40px;
+      top: -18px;
+      left: 52px;
+    }
+
+    .c2 {
+      width: 90px;
+      height: 30px;
+      top: 14%;
+      left: 70%;
+      animation-duration: 55s;
+      animation-delay: -12s;
+    }
+
+    .c2::before {
+      width: 42px;
+      height: 42px;
+      top: -22px;
+      left: 12px;
+    }
+
+    .c2::after {
+      width: 30px;
+      height: 30px;
+      top: -14px;
+      left: 40px;
+    }
+
+    .c3 {
+      width: 70px;
+      height: 24px;
+      top: 3%;
+      left: 40%;
+      animation-duration: 50s;
+      animation-delay: -28s;
+    }
+
+    .c3::before {
+      width: 32px;
+      height: 32px;
+      top: -18px;
+      left: 10px;
+    }
+
+    .c3::after {
+      width: 24px;
+      height: 24px;
+      top: -12px;
+      left: 32px;
+    }
+
+    .star {
+      position: absolute;
+      font-size: 18px;
+      animation: twinkle 3s ease-in-out infinite;
+      opacity: 0.4;
+    }
+
+    .star:nth-child(4) {
+      top: 10%;
+      left: 85%;
+      animation-delay: 0s;
+    }
+
+    .star:nth-child(5) {
+      top: 22%;
+      left: 8%;
+      animation-delay: 1s;
+    }
+
+    .star:nth-child(6) {
+      top: 5%;
+      left: 55%;
+      animation-delay: 2s;
+      font-size: 12px;
+    }
+
+    @keyframes float {
+      from {
+        transform: translateX(-200px);
+      }
+
+      to {
+        transform: translateX(120vw);
+      }
+    }
+
+    @keyframes twinkle {
+
+      0%,
+      100% {
+        opacity: 0.2;
+        transform: scale(1);
+      }
+
+      50% {
+        opacity: 0.7;
+        transform: scale(1.2);
+      }
+    }
+
+    /* ===== APP SHELL ===== */
+    #app {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      max-width: 680px;
+      margin: 0 auto;
+    }
+
+    /* ===== HEADER ===== */
+    header {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 20px 12px;
+      background: linear-gradient(135deg, #6EC6F5 0%, #9BD4F8 50%, #B8E6F0 100%);
+      border-bottom: 3px solid rgba(255, 255, 255, 0.6);
+      box-shadow: 0 4px 20px rgba(100, 180, 240, 0.3);
+    }
+
+    .header-icon {
+      width: 46px;
+      height: 46px;
+      background: white;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      box-shadow: 0 2px 8px var(--shadow);
+      animation: bob 3s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes bob {
+
+      0%,
+      100% {
+        transform: translateY(0);
+      }
+
+      50% {
+        transform: translateY(-4px);
+      }
+    }
+
+    .header-text h1 {
+      font-size: 20px;
+      font-weight: 900;
+      color: white;
+      text-shadow: 0 2px 6px rgba(60, 120, 200, 0.35);
+      letter-spacing: 0.5px;
+      line-height: 1.1;
+    }
+
+    .header-text p {
+      font-size: 12px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.85);
+      letter-spacing: 0.3px;
+    }
+
+    .online-dots {
+      margin-left: auto;
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .online-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      border: 2px solid white;
+      position: relative;
+    }
+
+    .online-dot::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+
+    .dot-papa {
+      background: var(--papa);
+    }
+
+    .dot-papa::after {
+      background: var(--papa);
+    }
+
+    .dot-mama {
+      background: var(--mama);
+    }
+
+    .dot-mama::after {
+      background: var(--mama);
+    }
+
+    @keyframes pulse-dot {
+
+      0%,
+      100% {
+        opacity: 1;
+        transform: scale(1);
+      }
+
+      50% {
+        opacity: 0.3;
+        transform: scale(1.8);
+      }
+    }
+
+    .dot-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: white;
+      margin-left: -2px;
+    }
+
+    /* ===== MESSAGES AREA ===== */
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 16px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      scroll-behavior: smooth;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    #messages::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    #messages::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    #messages::-webkit-scrollbar-thumb {
+      background: var(--sky-mid);
+      border-radius: 4px;
+    }
+
+    /* ===== DATE DIVIDER ===== */
+    .date-divider {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 6px 0;
+    }
+
+    .date-divider::before,
+    .date-divider::after {
+      content: '';
+      flex: 1;
+      height: 1.5px;
+      background: linear-gradient(90deg, transparent, var(--sky-mid), transparent);
+      border-radius: 2px;
+    }
+
+    .date-divider span {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      background: white;
+      padding: 3px 10px;
+      border-radius: 20px;
+      border: 1.5px solid var(--sky-mid);
+      white-space: nowrap;
+    }
+
+    /* ===== BUBBLE ===== */
+    .msg-row {
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+      animation: pop-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    }
+
+    @keyframes pop-in {
+      from {
+        opacity: 0;
+        transform: scale(0.7) translateY(12px);
+      }
+
+      to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+      }
+    }
+
+    .msg-row.self {
+      flex-direction: row-reverse;
+    }
+
+    .msg-row.other {
+      flex-direction: row;
+    }
+
+    .avatar {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      flex-shrink: 0;
+      box-shadow: 0 2px 8px var(--shadow);
+      border: 2.5px solid white;
+    }
+
+    .av-papa {
+      background: linear-gradient(135deg, #7FB8E8, var(--papa));
+    }
+
+    .av-mama {
+      background: linear-gradient(135deg, #F5A0C8, var(--mama));
+    }
+
+    .av-child {
+      background: linear-gradient(135deg, #90D493, var(--child));
+    }
+
+    .bubble-wrap {
+      display: flex;
+      flex-direction: column;
+      max-width: min(72%, 420px);
+      gap: 3px;
+    }
+
+    .msg-row.self .bubble-wrap {
+      align-items: flex-end;
+    }
+
+    .msg-row.other .bubble-wrap {
+      align-items: flex-start;
+    }
+
+    .sender-name {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 0 6px;
+      letter-spacing: 0.3px;
+    }
+
+    .name-papa {
+      color: var(--papa-dk);
+    }
+
+    .name-mama {
+      color: var(--mama-dk);
+    }
+
+    .name-child {
+      color: var(--child-dk);
+    }
+
+    .bubble {
+      padding: 10px 14px;
+      border-radius: var(--radius-lg);
+      font-size: 16px;
+      font-weight: 600;
+      line-height: 1.5;
+      word-break: break-word;
+      position: relative;
+      box-shadow: 0 3px 12px var(--shadow);
+      transition: transform 0.15s;
+    }
+
+    .bubble:active {
+      transform: scale(0.97);
+    }
+
+    /* 相手のメッセージ */
+    .bubble.papa {
+      background: white;
+      border: 2px solid #C5DFF5;
+      border-bottom-left-radius: 4px;
+      color: var(--text);
+    }
+
+    .bubble.mama {
+      background: #FFF0F7;
+      border: 2px solid #F8C8E0;
+      border-bottom-left-radius: 4px;
+      color: var(--text);
+    }
+
+    /* 自分（子供）のメッセージ */
+    .bubble.child {
+      background: linear-gradient(135deg, #6FD472, var(--child));
+      border-bottom-right-radius: 4px;
+      color: white;
+      box-shadow: 0 3px 12px rgba(70, 180, 80, 0.3);
+    }
+
+    .bubble-time {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-muted);
+      padding: 0 6px;
+    }
+
+    /* stamp / emoji big -->  */
+    .bubble.stamp {
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
+      font-size: 52px;
+      padding: 4px 8px;
+      line-height: 1;
+    }
+
+    /* ===== TYPING INDICATOR ===== */
+    .typing-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 8px;
+    }
+
+    .typing-bubble {
+      background: white;
+      border: 2px solid var(--sky-mid);
+      border-radius: 18px;
+      padding: 10px 16px;
+      display: flex;
+      gap: 5px;
+      align-items: center;
+      box-shadow: 0 2px 8px var(--shadow);
+    }
+
+    .typing-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--sky-mid);
+      animation: typing 1.2s ease-in-out infinite;
+    }
+
+    .typing-dot:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+
+    .typing-dot:nth-child(3) {
+      animation-delay: 0.4s;
+    }
+
+    @keyframes typing {
+
+      0%,
+      80%,
+      100% {
+        transform: scale(1);
+        background: var(--sky-mid);
+      }
+
+      40% {
+        transform: scale(1.4);
+        background: var(--papa);
+      }
+    }
+
+    /* ===== STAMP PICKER ===== */
+    #stamp-tray {
+      flex-shrink: 0;
+      display: none;
+      padding: 12px 16px;
+      background: white;
+      border-top: 2px solid var(--sky-mid);
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+    }
+
+    #stamp-tray.open {
+      display: flex;
+    }
+
+    .stamp-btn {
+      font-size: 32px;
+      background: var(--sky);
+      border: 2px solid var(--sky-mid);
+      border-radius: var(--radius-md);
+      width: 54px;
+      height: 54px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s;
+    }
+
+    .stamp-btn:hover,
+    .stamp-btn:active {
+      transform: scale(1.25);
+      box-shadow: 0 4px 16px var(--shadow);
+    }
+
+    /* ===== INPUT BAR ===== */
+    #input-bar {
+      flex-shrink: 0;
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      padding: 10px 14px 14px;
+      background: white;
+      border-top: 3px solid var(--sky-mid);
+      box-shadow: 0 -4px 20px rgba(100, 160, 220, 0.12);
+    }
+
+    .icon-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      flex-shrink: 0;
+      transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .icon-btn:active {
+      transform: scale(0.9);
+    }
+
+    #stamp-toggle {
+      background: var(--sun);
+      box-shadow: 0 3px 10px rgba(244, 164, 38, 0.35);
+    }
+
+    #stamp-toggle:hover {
+      transform: scale(1.1) rotate(-8deg);
+    }
+
+    .input-wrap {
+      flex: 1;
+      background: var(--sky);
+      border: 2.5px solid var(--sky-mid);
+      border-radius: 22px;
+      display: flex;
+      align-items: flex-end;
+      padding: 4px 12px 4px 16px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .input-wrap:focus-within {
+      border-color: var(--mint);
+      box-shadow: 0 0 0 3px rgba(78, 205, 196, 0.2);
+    }
+
+    #msg-input {
+      flex: 1;
+      background: none;
+      border: none;
+      outline: none;
+      font-family: 'Nunito', sans-serif;
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+      resize: none;
+      min-height: 36px;
+      max-height: 120px;
+      line-height: 1.5;
+      padding: 6px 0;
+      -webkit-appearance: none;
+    }
+
+    #msg-input::placeholder {
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    #send-btn {
+      background: linear-gradient(135deg, #4ECDC4, #38B2AA);
+      box-shadow: 0 4px 14px rgba(78, 205, 196, 0.45);
+      color: white;
+      font-size: 22px;
+    }
+
+    #send-btn:hover {
+      transform: scale(1.12) rotate(8deg);
+    }
+
+    #send-btn:disabled {
+      background: var(--sky-mid);
+      box-shadow: none;
+      cursor: default;
+      transform: none;
+    }
+
+    /* ===== SEND ANIMATION ===== */
+    @keyframes fly-out {
+      0% {
+        opacity: 1;
+        transform: scale(1) rotate(0deg);
+      }
+
+      60% {
+        opacity: 0.6;
+        transform: scale(1.3) rotate(20deg) translateX(6px) translateY(-8px);
+      }
+
+      100% {
+        opacity: 0;
+        transform: scale(0.5) rotate(40deg) translateX(20px) translateY(-20px);
+      }
+    }
+
+    .send-fly {
+      animation: fly-out 0.4s ease-in forwards;
+    }
+
+    /* ===== UNREAD BADGE ===== */
+    .new-msg-toast {
+      position: fixed;
+      bottom: 90px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--coral);
+      color: white;
+      font-size: 13px;
+      font-weight: 800;
+      padding: 8px 18px;
+      border-radius: 20px;
+      box-shadow: 0 4px 16px rgba(255, 107, 107, 0.4);
+      cursor: pointer;
+      white-space: nowrap;
+      animation: slide-up 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+      z-index: 100;
+      display: none;
+    }
+
+    @keyframes slide-up {
+      from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(20px) scale(0.8);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0) scale(1);
+      }
+    }
+
+    /* ===== SCROLL TO BOTTOM BTN ===== */
+    #scroll-btn {
+      position: fixed;
+      bottom: 90px;
+      right: 20px;
+      width: 40px;
+      height: 40px;
+      background: white;
+      border: 2px solid var(--sky-mid);
+      border-radius: 50%;
+      font-size: 18px;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 3px 12px var(--shadow);
+      transition: transform 0.2s;
+      z-index: 50;
+    }
+
+    #scroll-btn:hover {
+      transform: scale(1.15);
+    }
+
+    #scroll-btn.visible {
+      display: flex;
+    }
+
+    /* ===== SAFE AREA ===== */
+    @supports (padding-bottom: env(safe-area-inset-bottom)) {
+      #input-bar {
+        padding-bottom: calc(14px + env(safe-area-inset-bottom));
+      }
+    }
+
+    /* ===== RESPONSIVE ===== */
+    @media (min-width: 500px) {
+      .bubble {
+        font-size: 17px;
+      }
+
+      #msg-input {
+        font-size: 17px;
+      }
+    }
+
+    /* ===== LOGIN SCREEN ===== */
+    #login-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(160deg, #B8E6F0 0%, #E8F4FD 50%, #D4EDDA 100%);
+    }
+
+    #login-screen.hidden {
+      display: none;
+    }
+
+    .login-card {
+      background: white;
+      border-radius: 28px;
+      padding: 36px 32px 32px;
+      width: min(360px, 90vw);
+      box-shadow: 0 12px 48px rgba(90, 90, 140, 0.15);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .login-icon {
+      font-size: 52px;
+      line-height: 1;
+    }
+
+    .login-title {
+      font-size: 22px;
+      font-weight: 900;
+      color: var(--text);
+      letter-spacing: 0.5px;
+      text-align: center;
+      line-height: 1.3;
+    }
+
+    .login-sub {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-align: center;
+      margin-top: -10px;
+    }
+
+    .login-fields {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .login-input {
+      width: 100%;
+      padding: 13px 16px;
+      border: 2.5px solid var(--sky-mid);
+      border-radius: 14px;
+      font-family: 'Nunito', sans-serif;
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+      background: var(--sky);
+      outline: none;
+      transition: border-color .2s, box-shadow .2s;
+      -webkit-appearance: none;
+    }
+
+    .login-input:focus {
+      border-color: var(--mint);
+      box-shadow: 0 0 0 3px rgba(78, 205, 196, 0.2);
+      background: white;
+    }
+
+    .login-btn {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #4ECDC4, #38B2AA);
+      color: white;
+      border: none;
+      border-radius: 14px;
+      font-family: 'Nunito', sans-serif;
+      font-size: 17px;
+      font-weight: 800;
+      cursor: pointer;
+      letter-spacing: 0.5px;
+      box-shadow: 0 4px 16px rgba(78, 205, 196, 0.4);
+      transition: transform .2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow .15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .login-btn:hover {
+      transform: scale(1.03);
+    }
+
+    .login-btn:active {
+      transform: scale(0.97);
+    }
+
+    .login-btn:disabled {
+      background: var(--sky-mid);
+      box-shadow: none;
+      cursor: default;
+      transform: none;
+    }
+
+    .login-error {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--coral-dk);
+      text-align: center;
+      background: #FFF0F0;
+      border: 1.5px solid #FFCCCC;
+      border-radius: 10px;
+      padding: 8px 14px;
+      display: none;
+      width: 100%;
+    }
+
+    .login-error.show {
+      display: block;
+    }
+
+    .login-loading {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--mint-dk);
+      text-align: center;
+      display: none;
+    }
+
+    .login-loading.show {
+      display: block;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- ===== ログイン画面 ===== -->
+  <div id="login-screen" role="main" aria-label="ログイン">
+    <div class="login-card">
+      <div class="login-icon">🏠</div>
+      <div class="login-title">かぞくチャット</div>
+      <div class="login-sub">ログインしてはじめよう！</div>
+      <div class="login-loading" id="login-loading">ログイン中です…</div>
+      <button class="login-btn" id="login-btn" onclick="redirectToHostedUi()">
+        ログイン ➤
+      </button>
+    </div>
+  </div>
+
+  <!-- 背景デコ -->
+  <div class="bg-deco" aria-hidden="true">
+    <div class="cloud-shape c1"></div>
+    <div class="cloud-shape c2"></div>
+    <div class="cloud-shape c3"></div>
+    <span class="star">⭐</span>
+    <span class="star">✨</span>
+    <span class="star">🌟</span>
+  </div>
+
+  <div id="app">
+    <!-- ヘッダー -->
+    <header>
+      <div class="header-icon" aria-hidden="true">🏠</div>
+      <div class="header-text">
+        <h1>かぞくチャット</h1>
+        <p>みんなでおはなし！</p>
+      </div>
+      <div class="online-dots" aria-label="オンライン中">
+        <div class="online-dot dot-papa" title="パパ"></div>
+        <span class="dot-label">パパ</span>
+        <div class="online-dot dot-mama" title="ママ" style="animation-delay:0.6s"></div>
+        <span class="dot-label">ママ</span>
+      </div>
+    </header>
+
+    <!-- メッセージ一覧 -->
+    <div id="messages" role="log" aria-label="チャット" aria-live="polite"></div>
+
+    <!-- 新メッセージトースト -->
+    <div class="new-msg-toast" id="new-toast" role="status" onclick="scrollToBottom(true)">
+      ⬇ あたらしいメッセージ！
+    </div>
+
+    <!-- スクロールボタン -->
+    <button id="scroll-btn" onclick="scrollToBottom(true)" aria-label="いちばん下へ">⬇</button>
+
+    <!-- スタンプトレイ -->
+    <div id="stamp-tray" role="group" aria-label="スタンプ"></div>
+
+    <!-- 入力バー -->
+    <div id="input-bar">
+      <button class="icon-btn" id="stamp-toggle" onclick="toggleStampTray()" aria-label="スタンプをえらぶ"
+        title="スタンプ">😊</button>
+      <div class="input-wrap">
+        <textarea id="msg-input" placeholder="メッセージをかいてね..." rows="1" aria-label="メッセージを入力"></textarea>
+      </div>
+      <button class="icon-btn" id="send-btn" onclick="sendMessage()" disabled aria-label="おくる">
+        ➤
+      </button>
+    </div>
+  </div>
+
+  <script>
+    /* ============================================================
+       CONFIG — 実際の利用時はここを環境に合わせて変更
+       ============================================================ */
+    // このWebアプリを使うのは常に子供（child）
+    // 親はLINEを使うためこの値は変更しない
+    const CURRENT_USER_ID = 'child';
+
+    const CONFIG = {
+      // ── Cognito設定（環境に合わせて変更） ──
+      cognitoRegion: 'ap-northeast-1',
+      userPoolId: 'ap-northeast-1_jSP6tGpCB',   // ← Cognito User Pool ID
+      appClientId: '2d9n4phc1u8v8qpbdo6n68b48g',  // ← CognitoアプリクライアントのクライアントID
+      hostedUiDomain: 'ap-northeast-1jsp6tgpcb.auth.ap-northeast-1.amazoncognito.com', // ← Cognitoドメイン
+      callbackUrl: 'https://d3u34smt05anmf.cloudfront.net/',  // ← CloudFrontのURL（末尾スラッシュあり）
+      // ────────────────────────────────────────
+      currentUser: { id: CURRENT_USER_ID, name: '自分', emoji: '🧒', role: 'child' },
+      members: {
+        papa: { name: 'パパ', emoji: '👨', role: 'papa' },
+        mama: { name: 'ママ', emoji: '👩', role: 'mama' },
+        child: { name: '自分', emoji: '🧒', role: 'child' },
+      },
+      wsUrl: 'wss://hum897v8z5.execute-api.ap-northeast-1.amazonaws.com/prod',
+      idToken: '',                            // ← Cognito IDトークン（Amplify等で取得後にセット
+      stamps: ['😊', '😄', '😆', '🤣', '😍', '🥰', '😎', '🤩',
+        '😢', '😭', '😡', '😱', '🤔', '😴', '🥳', '👍',
+        '❤️', '🌟', '🎉', '🎈', '🍎', '🍦', '🐶', '🐱',
+        '⚽', '🎮', '📚', '🌈', '🌸', '🌙'],
+    };
+
+    /* ============================================================
+       STATE
+       ============================================================ */
+    let ws = null;
+    let messages = [];
+    let isAtBottom = true;
+
+    /* ============================================================
+       WEBSOCKET
+       ============================================================ */
+    function connectWS() {
+      try {
+        // userId は常に 'child' 固定（このWebアプリは子供専用）
+        // Lambdaオーソライザーが token を検証し、$connect ハンドラが userId を使用する
+        const token = CONFIG.idToken || '';
+        const url = `${CONFIG.wsUrl}?userId=${encodeURIComponent(CURRENT_USER_ID)}&token=${encodeURIComponent(token)}`;
+        ws = new WebSocket(url);
+        ws.onopen = () => console.log('WS connected');
+        ws.onmessage = (e) => handleIncoming(JSON.parse(e.data));
+        ws.onclose = () => setTimeout(connectWS, 3000);
+        ws.onerror = () => ws.close();
+        loadHistory();
+      } catch (err) {
+        // TODO: エラー処理
+        console.error('Error connecting to WebSocket:', err);
+      }
+    }
+
+    function loadHistory() {
+      // TODO 過去のメッセージを読み込む処理
+      /* 実装例: Lambda で過去50件を返す専用エンドポイントを叩く
+         fetch('/history').then(r=>r.json()).then(msgs => msgs.forEach(addMessage)); */
+    }
+
+    function handleIncoming(data) {
+      if (data.type === 'message') addMessage(data, true);
+      if (data.type === 'typing') showTyping(data.from);
+    }
+
+    /* ============================================================
+       RENDERING
+       ============================================================ */
+    function formatTime(date) {
+      return date.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+    }
+    function formatDate(date) {
+      const today = new Date();
+      const d = new Date(date);
+      if (d.toDateString() === today.toDateString()) return 'きょう';
+      const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+      if (d.toDateString() === yesterday.toDateString()) return 'きのう';
+      return `${d.getMonth() + 1}がつ${d.getDate()}にち`;
+    }
+
+    let lastDateLabel = '';
+
+    function addMessage(msg, animate = true, firstOfDay = false) {
+      const container = document.getElementById('messages');
+      const isSelf = msg.from === CURRENT_USER_ID;
+      const member = CONFIG.members[msg.from] || { name: msg.from, emoji: '👤', role: msg.from };
+      const time = msg.time ? new Date(msg.time) : new Date();
+      const dateLabel = formatDate(time);
+
+      // 日付区切り
+      if (dateLabel !== lastDateLabel) {
+        lastDateLabel = dateLabel;
+        const divider = document.createElement('div');
+        divider.className = 'date-divider';
+        divider.innerHTML = `<span>${dateLabel}</span>`;
+        container.appendChild(divider);
+      }
+
+      const row = document.createElement('div');
+      row.className = `msg-row ${isSelf ? 'self' : 'other'}`;
+      if (!animate) row.style.animation = 'none';
+
+      const avatar = document.createElement('div');
+      avatar.className = `avatar av-${member.role}`;
+      avatar.textContent = member.emoji;
+      avatar.setAttribute('aria-hidden', 'true');
+
+      const wrap = document.createElement('div');
+      wrap.className = 'bubble-wrap';
+
+      const nameEl = document.createElement('div');
+      nameEl.className = `sender-name name-${member.role}`;
+      if (!isSelf) nameEl.textContent = member.name;
+
+      const bubble = document.createElement('div');
+      bubble.className = `bubble ${member.role}${msg.isStamp ? ' stamp' : ''}`;
+      bubble.textContent = msg.text;
+
+      const timeEl = document.createElement('div');
+      timeEl.className = 'bubble-time';
+      timeEl.textContent = formatTime(time);
+
+      wrap.appendChild(nameEl);
+      wrap.appendChild(bubble);
+      wrap.appendChild(timeEl);
+      row.appendChild(isSelf ? wrap : avatar);
+      row.appendChild(isSelf ? avatar : wrap);
+
+      // タイプ中インジケーター削除
+      removeTyping();
+
+      // スクロール判定
+      const wasAtBottom = isAtBottom;
+      container.appendChild(row);
+      messages.push(msg);
+
+      if (wasAtBottom) {
+        scrollToBottom(false);
+      } else if (!isSelf) {
+        showNewToast();
+      }
+    }
+
+    /* ============================================================
+       SCROLL
+       ============================================================ */
+    function scrollToBottom(smooth = true) {
+      const el = document.getElementById('messages');
+      el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'instant' });
+      hideNewToast();
+    }
+
+    document.getElementById('messages').addEventListener('scroll', function () {
+      const el = this;
+      isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+      const btn = document.getElementById('scroll-btn');
+      btn.classList.toggle('visible', !isAtBottom);
+      if (isAtBottom) hideNewToast();
+    });
+
+    /* ============================================================
+       TYPING INDICATOR
+       ============================================================ */
+    let typingTimer = null;
+    function showTyping(from) {
+      removeTyping();
+      const container = document.getElementById('messages');
+      const member = CONFIG.members[from] || {};
+      const row = document.createElement('div');
+      row.className = 'msg-row other';
+      row.id = 'typing-row';
+      row.innerHTML = `
+    <div class="avatar av-${member.role}" aria-hidden="true">${member.emoji || '👤'}</div>
+    <div class="typing-indicator">
+      <div class="typing-bubble">
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+      </div>
+    </div>`;
+      container.appendChild(row);
+      if (isAtBottom) scrollToBottom(true);
+      typingTimer = setTimeout(removeTyping, 5000);
+    }
+    function removeTyping() {
+      clearTimeout(typingTimer);
+      document.getElementById('typing-row')?.remove();
+    }
+
+    /* ============================================================
+       TOAST / BADGE
+       ============================================================ */
+    function showNewToast() {
+      const t = document.getElementById('new-toast');
+      t.style.display = 'block';
+    }
+    function hideNewToast() {
+      document.getElementById('new-toast').style.display = 'none';
+    }
+
+    /* ============================================================
+       STAMP TRAY
+       ============================================================ */
+    let stampOpen = false;
+    function toggleStampTray() {
+      stampOpen = !stampOpen;
+      const tray = document.getElementById('stamp-tray');
+      tray.classList.toggle('open', stampOpen);
+      if (stampOpen && tray.children.length === 0) {
+        CONFIG.stamps.forEach(s => {
+          const btn = document.createElement('button');
+          btn.className = 'stamp-btn';
+          btn.textContent = s;
+          btn.setAttribute('aria-label', `スタンプ ${s}`);
+          btn.onclick = () => sendStamp(s);
+          tray.appendChild(btn);
+        });
+      }
+    }
+    function sendStamp(emoji) {
+      const msg = {
+        id: Date.now(),
+        from: CURRENT_USER_ID,
+        text: emoji,
+        isStamp: true,
+        time: new Date(),
+      };
+      addMessage(msg, true);
+      sendToServer({ action: 'sendMessage', ...msg });
+      toggleStampTray();
+      animateSendBtn();
+    }
+
+    /* ============================================================
+       SEND
+       ============================================================ */
+    const input = document.getElementById('msg-input');
+    const sendBtn = document.getElementById('send-btn');
+
+    input.addEventListener('input', function () {
+      this.style.height = 'auto';
+      this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+      sendBtn.disabled = this.value.trim() === '';
+      // タイピング通知
+      if (ws?.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'typing', from: CURRENT_USER_ID }));
+      }
+    });
+
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        if (!sendBtn.disabled) sendMessage();
+      }
+    });
+
+    function sendMessage() {
+      const text = input.value.trim();
+      if (!text) return;
+      const msg = {
+        id: Date.now(),
+        from: CURRENT_USER_ID,
+        text,
+        time: new Date(),
+      };
+      addMessage(msg, true);
+      sendToServer({ action: 'sendMessage', ...msg });
+      input.value = '';
+      input.style.height = 'auto';
+      sendBtn.disabled = true;
+      animateSendBtn();
+      // スタンプトレイが開いていたら閉じる
+      if (stampOpen) toggleStampTray();
+    }
+
+    function animateSendBtn() {
+      sendBtn.classList.add('send-fly');
+      setTimeout(() => sendBtn.classList.remove('send-fly'), 420);
+    }
+
+    function sendToServer(data) {
+      if (ws?.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(data));
+      }
+    }
+
+    /* ============================================================
+       LOGIN
+       ============================================================ */
+
+    /**
+     * Hosted UI のログインページにリダイレクトする。
+     * ログイン成功後、CognitoはcallbackUrlに以下の形式でリダイレクトする:
+     *   https://your-app.cloudfront.net/#id_token=eyJ...&token_type=Bearer&expires_in=3600
+     */
+    function redirectToHostedUi() {
+      const params = new URLSearchParams({
+        client_id: CONFIG.appClientId,
+        response_type: 'token',           // 暗黙的付与: URLフラグメントにトークンを返す
+        scope: 'openid',
+        redirect_uri: CONFIG.callbackUrl,
+      });
+      window.location.href =
+        `https://${CONFIG.hostedUiDomain}/login?${params.toString()}`;
+    }
+
+    /**
+     * コールバック時にURLフラグメント（#以降）からid_tokenを取り出す。
+     * 例: https://your-app.cloudfront.net/#id_token=eyJ...&token_type=Bearer
+     */
+    function extractTokenFromFragment() {
+      const fragment = window.location.hash.slice(1); // 先頭の # を除去
+      if (!fragment) return null;
+      const params = new URLSearchParams(fragment);
+      return params.get('id_token') || null;
+    }
+
+    /* ============================================================
+       INIT
+       ============================================================ */
+    (function init() {
+      const idToken = extractTokenFromFragment();
+
+      if (idToken) {
+        // ── コールバック後: トークンをセットしてチャット起動 ──
+        CONFIG.idToken = idToken;
+
+        // URLフラグメントをブラウザ履歴から消去（セキュリティ上トークンをURLに残さない）
+        history.replaceState(null, '', window.location.pathname);
+
+        // ログイン画面を非表示にしてチャット起動
+        document.getElementById('login-screen').classList.add('hidden');
+        connectWS();
+        scrollToBottom(false);
+      } else {
+        // ── 未ログイン: ログインボタンを表示して待機 ──
+        // ボタンクリックでredirectToHostedUi()が呼ばれる
+      }
+    })();
+  </script>
+</body>
+
+</html>

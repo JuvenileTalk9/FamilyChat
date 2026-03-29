@@ -1,0 +1,4 @@
+# boto3 is pre-installed in the Lambda Python runtime.
+# Add external dependencies here only if needed.
+# Example:
+#   requests==2.31.0
