@@ -5,6 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <title>かぞくチャット</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1052,17 +1053,46 @@
     /* ============================================================
        WEBSOCKET
        ============================================================ */
+    let wsRetryCount = 0;
+    const WS_MAX_RETRY = 5;
+
     function connectWS() {
       try {
         // userId は常に 'child' 固定（このWebアプリは子供専用）
         // Lambdaオーソライザーが token を検証し、$connect ハンドラが userId を使用する
         const token = CONFIG.idToken || '';
         const url = `${CONFIG.wsUrl}?userId=${encodeURIComponent(CURRENT_USER_ID)}&token=${encodeURIComponent(token)}`;
+        console.log('[connectWS] connecting... retry=' + wsRetryCount);
         ws = new WebSocket(url);
-        ws.onopen = () => console.log('WS connected');
+
+        ws.onopen = () => {
+          console.log('[connectWS] connected');
+          wsRetryCount = 0;  // 接続成功でリトライカウントをリセット
+        };
+
         ws.onmessage = (e) => handleIncoming(JSON.parse(e.data));
-        ws.onclose = () => setTimeout(connectWS, 3000);
-        ws.onerror = () => ws.close();
+
+        ws.onerror = (e) => {
+          console.error('[connectWS] error:', e);
+        };
+
+        ws.onclose = (e) => {
+          console.warn('[connectWS] closed. code=' + e.code + ' reason=' + e.reason);
+          // 1008(Policy Violation)=オーソライザーDeny、1006=異常切断
+          if (e.code === 1008) {
+            console.error('[connectWS] Authorizer denied. Check FamilyChatAuthorizer logs.');
+            return;  // 認証エラーは再接続しない
+          }
+          if (wsRetryCount >= WS_MAX_RETRY) {
+            console.error('[connectWS] max retry reached. giving up.');
+            return;
+          }
+          wsRetryCount++;
+          const delay = Math.min(1000 * Math.pow(2, wsRetryCount), 30000); // 指数バックオフ
+          console.log('[connectWS] retry in ' + delay + 'ms');
+          setTimeout(connectWS, delay);
+        };
+
         loadHistory();
       } catch (err) {
         // TODO: エラー処理
@@ -1075,7 +1105,6 @@
     }
 
     function handleIncoming(data) {
-      console.log('Received:', data);
       if (data.type === 'message') addMessage(data, true);
       if (data.type === 'typing') showTyping(data.from);
     }
@@ -1338,18 +1367,26 @@
 
     // ── リダイレクト ─────────────────────────────────────────────
 
-    /** Cognito ログインページに PKCE パラメータ付きでリダイレクトする */
-    async function redirectToHostedUi() {
+    /**
+     * Cognito ログインページに PKCE パラメータ付きでリダイレクトする。
+     * silentMode=true のとき prompt=none を付けてセッション確認のみ行う。
+     *   - セッションあり → code が返ってきてチャット画面へ自動遷移
+     *   - セッションなし → error=login_required が返ってくる（ログイン画面を表示）
+     */
+    async function redirectToHostedUi({ silentMode = false } = {}) {
       const verifier = generateAndStoreVerifier();
       const challenge = await generateChallenge(verifier);
       const params = new URLSearchParams({
         client_id: CONFIG.appClientId,
-        response_type: 'code',              // 認可コードフロー
+        response_type: 'code',
         scope: 'openid',
         redirect_uri: CONFIG.callbackUrl,
         code_challenge: challenge,
         code_challenge_method: 'S256',
       });
+      if (silentMode) {
+        params.set('prompt', 'none');  // UIを表示せずセッションのみ確認
+      }
       window.location.href =
         `https://${CONFIG.hostedUiDomain}/login?${params.toString()}`;
     }
@@ -1403,12 +1440,15 @@
        INIT
        ============================================================ */
     (async function init() {
+      const urlParams = new URLSearchParams(window.location.search);
       const loadEl = document.getElementById('login-loading');
+      const loginBtn = document.getElementById('login-btn');
 
-      // URLに ?code= が含まれている = Cognito からのコールバック
-      if (new URLSearchParams(window.location.search).has('code')) {
+      // ── ① Cognito からのコールバック (?code= または ?error=) ──
+      if (urlParams.has('code')) {
+        // 通常ログイン or サイレント確認のコールバック
         loadEl.classList.add('show');
-        document.getElementById('login-btn').disabled = true;
+        loginBtn.disabled = true;
 
         const idToken = await handleCallback();
         if (idToken) {
@@ -1418,13 +1458,27 @@
           connectWS();
           scrollToBottom(false);
         } else {
-          // トークン交換失敗: ログインボタンを再表示
           loadEl.classList.remove('show');
-          document.getElementById('login-btn').disabled = false;
+          loginBtn.disabled = false;
         }
+        return;
       }
-      // 未ログイン時はログイン画面を表示したまま待機
-      // ボタンクリックで redirectToHostedUi() が呼ばれる
+
+      if (urlParams.has('error')) {
+        // prompt=none でセッションなし → error=login_required が返ってくる
+        // URLを綺麗にしてログイン画面を表示するだけ（ユーザー操作待ち）
+        history.replaceState(null, '', window.location.pathname);
+        console.log('[init] No active session:', urlParams.get('error'));
+        return;
+      }
+
+      // ── ② 初回アクセス: サイレントログインを試みる ──
+      // prompt=none でCognitoにリダイレクト。ユーザーには画面遷移が見えるが
+      // セッションが有効なら即座にコールバックURLに戻ってチャット画面が開く。
+      // セッションがなければ ?error=login_required で戻ってきてログイン画面を表示する。
+      loadEl.classList.add('show');
+      loginBtn.disabled = true;
+      await redirectToHostedUi({ silentMode: true });
     })();
   </script>
 </body>
