@@ -31,24 +31,21 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # ── Environment variables ────────────────────────────────────────────────────
-CONNECTIONS_TABLE = os.environ["CONNECTIONS_TABLE"]  # e.g. "FamilyChatConnections"
-MESSAGES_TABLE = os.environ["MESSAGES_TABLE"]  # e.g. "FamilyChatMessages"
+CONNECTIONS_TABLE  = os.environ["CONNECTIONS_TABLE"]   # e.g. "FamilyChatConnections"
+MESSAGES_TABLE     = os.environ["MESSAGES_TABLE"]       # e.g. "FamilyChatMessages"
 LINE_FUNCTION_NAME = os.environ["LINE_FUNCTION_NAME"]  # e.g. "FamilyLineNotify"
-ROOM_ID = os.environ.get("ROOM_ID", "family")
-API_GW_ENDPOINT = os.environ[
-    "API_GW_ENDPOINT"
-]  # e.g. "https://xxx.execute-api.ap-northeast-1.amazonaws.com/prod"
+ROOM_ID            = os.environ.get("ROOM_ID", "family")
+API_GW_ENDPOINT    = os.environ["API_GW_ENDPOINT"]     # e.g. "https://xxx.execute-api.ap-northeast-1.amazonaws.com/prod"
 
 # ── AWS clients (reused across warm invocations) ─────────────────────────────
-dynamodb = boto3.resource("dynamodb")
+dynamodb   = boto3.resource("dynamodb")
 lambda_cli = boto3.client("lambda")
 
 conn_table = dynamodb.Table(CONNECTIONS_TABLE)
-msg_table = dynamodb.Table(MESSAGES_TABLE)
+msg_table  = dynamodb.Table(MESSAGES_TABLE)
 
 # API Gateway Management API client is created lazily (endpoint known at runtime)
 _apigw_mgmt = None
-
 
 def get_apigw_mgmt():
     global _apigw_mgmt
@@ -63,7 +60,6 @@ def get_apigw_mgmt():
 # ============================================================
 # Entry point
 # ============================================================
-
 
 def lambda_handler(event: dict, context) -> dict:
     """Main Lambda entry point dispatched by API Gateway WebSocket routes."""
@@ -90,7 +86,6 @@ def lambda_handler(event: dict, context) -> dict:
 # Route handlers
 # ============================================================
 
-
 def handle_connect(event: dict, connection_id: str) -> dict:
     """
     $connect: save connection to DynamoDB.
@@ -100,8 +95,11 @@ def handle_connect(event: dict, connection_id: str) -> dict:
       token   - Cognito ID token (validated by API Gateway authorizer;
                 kept here for reference / additional checks if needed)
     """
-    qs = event.get("queryStringParameters") or {}
-    user_id = qs.get("userId", "unknown")
+    user_id = (
+        event.get("requestContext", {})
+            .get("authorizer", {})
+            .get("userId", "unknown")
+    )
 
     # TTL: auto-expire connection record after 24 hours (covers accidental disconnects)
     ttl = int(time.time()) + 86400
@@ -109,10 +107,10 @@ def handle_connect(event: dict, connection_id: str) -> dict:
     conn_table.put_item(
         Item={
             "connectionId": connection_id,
-            "userId": user_id,
-            "roomId": ROOM_ID,
-            "connectedAt": _now_iso(),
-            "ttl": ttl,
+            "userId":       user_id,
+            "roomId":       ROOM_ID,
+            "connectedAt":  _now_iso(),
+            "ttl":          ttl,
         }
     )
     logger.info("Connected: %s (userId=%s)", connection_id, user_id)
@@ -155,22 +153,19 @@ def handle_send_message(event: dict, connection_id: str) -> dict:
     message_id = f"{created_at}#{connection_id}"
 
     message = {
-        "roomId": ROOM_ID,
+        "roomId":    ROOM_ID,
         "createdAt": created_at,
         "messageId": message_id,
-        "userId": sender_id,
-        "text": text,
-        "isStamp": bool(body.get("isStamp", False)),
+        "userId":    sender_id,
+        "text":      text,
+        "isStamp":   bool(body.get("isStamp", False)),
     }
 
     # 1. Persist to DynamoDB
     msg_table.put_item(Item=message)
     logger.info("Message saved: %s from %s", message_id, sender_id)
 
-    # 2. Broadcast to all active WebSocket connections
-    _broadcast(message, skip_connection_id=None)
-
-    # 3. Trigger LINE notification asynchronously (fire-and-forget)
+    # 2. Trigger LINE notification asynchronously (fire-and-forget)
     _invoke_line_notify(message)
 
     return _ok()
@@ -179,7 +174,6 @@ def handle_send_message(event: dict, connection_id: str) -> dict:
 # ============================================================
 # Helper: push unread messages on reconnect
 # ============================================================
-
 
 def _push_unread_messages(connection_id: str, user_id: str) -> None:
     """
@@ -197,58 +191,11 @@ def _push_unread_messages(connection_id: str, user_id: str) -> None:
         if not items:
             return
 
-        payload = json.dumps(
-            {"type": "history", "messages": items}, ensure_ascii=False, default=str
-        )
+        payload = json.dumps({"type": "history", "messages": items}, ensure_ascii=False, default=str)
         _send_to_connection(connection_id, payload)
         logger.info("Pushed %d history messages to %s", len(items), connection_id)
     except Exception as exc:
         logger.warning("Failed to push history to %s: %s", connection_id, exc)
-
-
-# ============================================================
-# Helper: broadcast to all connections
-# ============================================================
-
-
-def _broadcast(message: dict, skip_connection_id: str | None = None) -> None:
-    """
-    Fetch all connection IDs for this room and push the message.
-    Stale connections that return GoneException are deleted automatically.
-    """
-    # Scan connections for this room.
-    # For a tiny family group (< 10 connections), Scan is perfectly fine.
-    # If you later need scale, add a GSI on roomId.
-    try:
-        response = conn_table.scan(
-            FilterExpression=boto3.dynamodb.conditions.Attr("roomId").eq(ROOM_ID)
-        )
-        connections = response.get("Items", [])
-    except ClientError as exc:
-        logger.error("Failed to scan connections: %s", exc)
-        return
-
-    payload = json.dumps(
-        {"type": "message", **message},
-        ensure_ascii=False,
-        default=str,
-    )
-
-    stale_ids = []
-    for conn in connections:
-        cid = conn["connectionId"]
-        if cid == skip_connection_id:
-            continue
-        if not _send_to_connection(cid, payload):
-            stale_ids.append(cid)
-
-    # Clean up stale connections
-    for cid in stale_ids:
-        try:
-            conn_table.delete_item(Key={"connectionId": cid})
-            logger.info("Removed stale connection: %s", cid)
-        except ClientError as exc:
-            logger.warning("Could not delete stale connection %s: %s", cid, exc)
 
 
 def _send_to_connection(connection_id: str, payload: str) -> bool:
@@ -275,7 +222,6 @@ def _send_to_connection(connection_id: str, payload: str) -> bool:
 # Helper: invoke LINE notification Lambda
 # ============================================================
 
-
 def _invoke_line_notify(message: dict) -> None:
     """
     Asynchronously invoke the LINE notification Lambda.
@@ -286,9 +232,7 @@ def _invoke_line_notify(message: dict) -> None:
         lambda_cli.invoke(
             FunctionName=LINE_FUNCTION_NAME,
             InvocationType="Event",  # async
-            Payload=json.dumps(message, ensure_ascii=False, default=str).encode(
-                "utf-8"
-            ),
+            Payload=json.dumps(message, ensure_ascii=False, default=str).encode("utf-8"),
         )
         logger.info("LINE notify invoked for message from %s", message.get("userId"))
     except ClientError as exc:
@@ -299,7 +243,6 @@ def _invoke_line_notify(message: dict) -> None:
 # ============================================================
 # Helper: resolve userId from connection record
 # ============================================================
-
 
 def _get_user_id(connection_id: str) -> str:
     try:
@@ -313,7 +256,6 @@ def _get_user_id(connection_id: str) -> str:
 # ============================================================
 # Utilities
 # ============================================================
-
 
 def _parse_body(event: dict) -> dict | None:
     raw = event.get("body") or "{}"
