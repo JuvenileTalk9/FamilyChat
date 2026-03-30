@@ -14,3 +14,7 @@
 ## サンプル画面
 
 ![サンプル画面](https://github.com/JuvenileTalk9/FamilyChat/blob/main/img/sample.png)
+
+## 注意
+
+Cognitoの勉強がてら作成。画面はClaude先生に作ってもらったので品質は怪しい。
