@@ -15,12 +15,14 @@ Environment variables:
   LINE_CHANNEL_SECRET    - For webhook signature verification (required)
   CONNECTIONS_TABLE      - DynamoDB table name for WebSocket connections
   MESSAGES_TABLE         - DynamoDB table name for chat messages
+  USERS_TABLE            - DynamoDB table name for LINE userId mapping (default: FamilyChatUsers)
   API_GW_ENDPOINT        - API Gateway Management endpoint (https://...)
   ROOM_ID                - Chat room identifier (default: "family")
   CHILD_CONNECTION_USER  - userId of the child client (default: "child")
                            Used to target WebSocket push to iPad
 """
 
+import base64
 import hashlib
 import hmac
 import json
@@ -28,8 +30,6 @@ import logging
 import os
 import time
 from datetime import datetime, timezone
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 
 import boto3
 from boto3.dynamodb.conditions import Attr
@@ -42,14 +42,19 @@ logger.setLevel(logging.INFO)
 LINE_CHANNEL_SECRET    = os.environ["LINE_CHANNEL_SECRET"]
 CONNECTIONS_TABLE      = os.environ["CONNECTIONS_TABLE"]
 MESSAGES_TABLE         = os.environ["MESSAGES_TABLE"]
+USERS_TABLE            = os.environ.get("USERS_TABLE", "FamilyChatUsers")
 API_GW_ENDPOINT        = os.environ["API_GW_ENDPOINT"]   # https://xxx.amazonaws.com/prod
 ROOM_ID                = os.environ.get("ROOM_ID", "family")
 CHILD_CONNECTION_USER  = os.environ.get("CHILD_CONNECTION_USER", "child")
 
 # ── AWS clients ──────────────────────────────────────────────────────────────
-dynamodb   = boto3.resource("dynamodb")
-conn_table = dynamodb.Table(CONNECTIONS_TABLE)
-msg_table  = dynamodb.Table(MESSAGES_TABLE)
+dynamodb    = boto3.resource("dynamodb")
+conn_table  = dynamodb.Table(CONNECTIONS_TABLE)
+msg_table   = dynamodb.Table(MESSAGES_TABLE)
+users_table = dynamodb.Table(USERS_TABLE)
+
+# LINEユーザーID → 内部userId のインメモリキャッシュ（ウォームスタート高速化）
+_user_id_cache: dict = {}
 
 _apigw_mgmt = None
 
@@ -72,17 +77,28 @@ def lambda_handler(event: dict, context) -> dict:
     Called by API Gateway HTTP API when LINE sends a webhook POST.
     Must return 200 quickly — LINE retries if response takes >1s.
     """
-    # 1. Signature verification
-    body_raw = event.get("body") or ""
-    signature = (event.get("headers") or {}).get("x-line-signature", "")
+    # 1. ヘッダーキーを小文字に正規化（API Gatewayの設定に依らず確実に取得するため）
+    headers_raw = event.get("headers") or {}
+    headers = {k.lower(): v for k, v in headers_raw.items()}
+    signature = headers.get("x-line-signature", "")
 
-    if not _verify_signature(body_raw, signature):
+    # 2. Base64エンコードされている場合はバイト列にデコードする
+    #    API Gateway HTTP API は Content-Type によって isBase64Encoded=true になる場合がある
+    body_raw = event.get("body") or ""
+    is_base64 = event.get("isBase64Encoded", False)
+    if is_base64:
+        body_bytes = base64.b64decode(body_raw)
+    else:
+        body_bytes = body_raw.encode("utf-8")
+
+    # 3. 署名検証（バイト列で検証する）
+    if not _verify_signature(body_bytes, signature):
         logger.warning("Invalid LINE signature")
         return _resp(403, "Forbidden")
 
-    # 2. Parse events
+    # 4. JSONパース（署名検証後に文字列に戻す）
     try:
-        payload = json.loads(body_raw)
+        payload = json.loads(body_bytes.decode("utf-8"))
     except json.JSONDecodeError:
         logger.error("Invalid JSON body")
         return _resp(400, "Bad Request")
@@ -139,16 +155,13 @@ def _handle_message(line_event: dict) -> None:
     if not text:
         return
 
-    # LINE userId → 内部userId のマッピング
-    # 本番ではDynamoDBのユーザーテーブルを参照することを推奨
-    # ここでは LINE userId を sender として使用する
-    sender_id = _resolve_user_id(sender_line_uid)
-    timestamp = _now_iso()
-    message_id = f"{timestamp}#{sender_line_uid[:8]}"
+    sender_id  = _resolve_user_id(sender_line_uid)
+    created_at  = _now_iso()
+    message_id = f"{created_at}#{sender_line_uid[:8]}"
 
     message = {
         "roomId":    ROOM_ID,
-        "timestamp": timestamp,
+        "createdAt": created_at,
         "messageId": message_id,
         "userId":    sender_id,
         "text":      text,
@@ -176,7 +189,7 @@ def _handle_follow(line_event: dict) -> None:
     user_id = line_event.get("source", {}).get("userId", "unknown")
     logger.info("=== NEW FOLLOWER ===")
     logger.info("LINE userId: %s", user_id)
-    logger.info("→ Set this value to LINE_USER_IDS environment variable")
+    logger.info("-> Set this value to LINE_USER_IDS environment variable")
 
 
 def _handle_join(line_event: dict) -> None:
@@ -189,7 +202,7 @@ def _handle_join(line_event: dict) -> None:
     group_id = source.get("groupId", "unknown")
     logger.info("=== BOT JOINED GROUP ===")
     logger.info("LINE groupId: %s", group_id)
-    logger.info("→ Set this value to LINE_GROUP_ID environment variable")
+    logger.info("-> Set this value to LINE_GROUP_ID environment variable")
 
 
 # ============================================================
@@ -256,19 +269,21 @@ def _send_to_connection(connection_id: str, payload: str) -> bool:
 # Signature verification
 # ============================================================
 
-def _verify_signature(body: str, signature: str) -> bool:
+def _verify_signature(body_bytes: bytes, signature: str) -> bool:
     """
     Verify the X-Line-Signature header using HMAC-SHA256.
     https://developers.line.biz/en/docs/messaging-api/receiving-messages/#verifying-signatures
+
+    bodyはバイト列で受け取る。
+    encode() を二重にかけると署名が一致しなくなるため注意。
     """
     if not signature:
         return False
     expected = hmac.new(
         LINE_CHANNEL_SECRET.encode("utf-8"),
-        body.encode("utf-8"),
+        body_bytes,                            # ← バイト列をそのまま渡す
         hashlib.sha256,
     ).digest()
-    import base64
     expected_b64 = base64.b64encode(expected).decode("utf-8")
     return hmac.compare_digest(expected_b64, signature)
 
@@ -280,22 +295,35 @@ def _verify_signature(body: str, signature: str) -> bool:
 def _sticker_to_emoji(msg_obj: dict) -> str:
     """
     Convert a LINE sticker to a representative emoji.
-    LINE sticker keywords are used when available (newer sticker sets).
     Falls back to a generic emoji.
     """
-    keywords = msg_obj.get("stickerResourceType", "")
-    # stickerId ごとに絵文字をマッピングしても良いが、
-    # ここでは汎用的な表現にとどめる
     return "🎭"
 
 
 def _resolve_user_id(line_user_id: str) -> str:
     """
-    LINE userId を内部の userId にマッピングする。
-    本番では DynamoDB のユーザーテーブルを参照することを推奨。
-    暫定実装として LINE userId をそのまま使用する。
+    DynamoDB FamilyChatUsers テーブルを参照して
+    LINE userId を内部 userId (papa/mama) にマッピングする。
+    見つからない場合は line_user_id をそのまま返す。
+    ウォームスタート時はインメモリキャッシュを使い DynamoDB アクセスを省略する。
     """
-    return line_user_id
+    if line_user_id in _user_id_cache:
+        return _user_id_cache[line_user_id]
+
+    try:
+        resp = users_table.get_item(Key={"lineUserId": line_user_id})
+        item = resp.get("Item")
+        if item:
+            user_id = item.get("userId", line_user_id)
+            _user_id_cache[line_user_id] = user_id
+            logger.info("Resolved lineUserId=%s -> userId=%s", line_user_id, user_id)
+            return user_id
+        else:
+            logger.warning("lineUserId=%s not found in %s", line_user_id, USERS_TABLE)
+            return line_user_id
+    except ClientError as exc:
+        logger.error("Failed to resolve userId for %s: %s", line_user_id, exc)
+        return line_user_id
 
 
 def _now_iso() -> str:

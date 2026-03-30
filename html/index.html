@@ -1072,11 +1072,10 @@
 
     function loadHistory() {
       // TODO 過去のメッセージを読み込む処理
-      /* 実装例: Lambda で過去50件を返す専用エンドポイントを叩く
-         fetch('/history').then(r=>r.json()).then(msgs => msgs.forEach(addMessage)); */
     }
 
     function handleIncoming(data) {
+      console.log('Received:', data);
       if (data.type === 'message') addMessage(data, true);
       if (data.type === 'typing') showTyping(data.from);
     }
@@ -1101,7 +1100,10 @@
     function addMessage(msg, animate = true, firstOfDay = false) {
       const container = document.getElementById('messages');
       const isSelf = msg.from === CURRENT_USER_ID;
-      const member = CONFIG.members[msg.from] || { name: msg.from, emoji: '👤', role: msg.from };
+      if (isSelf) {
+        msg.userId = CURRENT_USER_ID;
+      }
+      const member = CONFIG.members[msg.userId] || { name: msg.userId, emoji: '👤', role: msg.userId };
       const time = msg.time ? new Date(msg.time) : new Date();
       const dateLabel = formatDate(time);
 
