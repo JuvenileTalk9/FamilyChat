@@ -5,8 +5,7 @@
 - S3バケットを作成する
     - バケット名：一意な名称
     - パブリックアクセス：`すべてブロック`
-- HTMLファイルをバケットにアップロードする
-    - ファイル名：`index.html`
+- 各種コンテンツファイルをバケットにアップロードする
     - メタデータ
         - タイプ：`システム定義`
         - キー：`Cache-Control`
@@ -50,6 +49,21 @@
     - パーテーションキー：`roomId`（string）
     - ソートキー：`createdAt`（string）
 
+### ユーザ管理用テーブル
+
+- ユーザ管理用テーブルを新規作成する
+    - テーブル名：`FamilyChatUsers`
+    - パーテーションキー：`lineUserId `（string）
+- LINEユーザを追加する
+    - 父
+        - lineUserId：Uから始まるLINEのID
+        - userId：`papa`
+    - 母
+        - lineUserId：Uから始まるLINEのID
+        - userId：`mama`
+
+※LINEのIDは後段のLambda関数にLINEからアクセスする機能まで作ると、CloudWatchLogsから確認できる
+
 ### 接続管理用テーブル
 
 - 接続管理用テーブルを新規作成する
@@ -69,6 +83,34 @@
     - アタッチするポリシー
         - `AmazonDynamoDBFullAccess`
         - `AWSLambdaBasicExecutionRole`
+        - インラインポリシー`AllowExecuteAPI`
+            ```json
+            {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Sid": "VisualEditor0",
+                        "Effect": "Allow",
+                        "Action": "execute-api:ManageConnections",
+                        "Resource": "*"
+                    }
+                ]
+            }
+            ```
+        - インラインポリシー`AllowInvokeLambdaFunction`
+            ```json
+            {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Sid": "VisualEditor0",
+                        "Effect": "Allow",
+                        "Action": "lambda:InvokeFunction",
+                        "Resource": "*"
+                    }
+                ]
+            }
+            ```
 
 - API Gatewayのオーソライザ用のLambdaのIAMロールを作成する
     - ロール名：`FamilyChatAuthorizerLambdaRole`
@@ -118,22 +160,15 @@
 ### LINE通知ハンドラ
 
 - Lambda関数を作成する
-    - 関数名：`FamilyChatHandler`
+    - 関数名：`FamilyLineNotify`
     - ロール：`FamilyChatLambdaRole`
     - 環境変数
         |キー|値|
         |:--|:--|
+        |`CHILD_USER_ID`|`child`|
         |`LINE_CHANNEL_ACCESS_TOKEN`|LINE Developersから取得|
-
-### LINE通知ハンドラ
-
-- Lambda関数を作成する
-    - 関数名：`FamilyChatHandler`
-    - ロール：`FamilyChatLambdaRole`
-    - 環境変数
-        |キー|値|
-        |:--|:--|
-        |`LINE_CHANNEL_ACCESS_TOKEN`|LINE Developersから取得|
+        |`LINE_GROUP_ID`|グループに通知する場合|
+        |`LINE_USER_IDS`|ユーザに通知する場合(カンマ`,`区切りで複数設定可)|
 
 ### LINE受信ハンドラ
 
@@ -149,6 +184,7 @@
         |`API_GW_ENDPOINT`|`http`で始まり`/prod`で終わるAPI Gatewayのエンドポイント|
         |`ROOM_ID`|`family`|
         |`CHILD_CONNECTION_USER`|`child`|
+        |`USERS_TABLE`|`FamilyChatUsers`|
     - ライムアウト：`10秒`
 
 ### オーソライザ
@@ -237,7 +273,3 @@ const ws = new WebSocket(`wss://xxx.amazonaws.com/prod?token=${idToken}`);
         - リソースパス：`/line-webhook`
         - 統合ターゲット：`FamliyLineWebhook`
     - ステージ名：`prod`
-
-## メモ
-
-- Lambdaに渡されるユーザ名がcognitoのログインユーザ担ってる
