@@ -139,7 +139,13 @@ def _handle_message(line_event: dict) -> None:
     msg_obj  = line_event.get("message", {})
     msg_type = msg_obj.get("type")
     source   = line_event.get("source", {})
+    source_type     = source.get("type", "user")       # "user" or "group"
     sender_line_uid = source.get("userId", "unknown")
+
+    # グループからのメッセージの場合はグループIDもログ出力
+    if source_type == "group":
+        logger.info("Message from group: %s, userId: %s",
+                    source.get("groupId", "unknown"), sender_line_uid)
 
     if msg_type == "text":
         text     = msg_obj.get("text", "").strip()
