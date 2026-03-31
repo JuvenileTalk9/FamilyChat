@@ -1067,7 +1067,8 @@
 
         ws.onopen = () => {
           console.log('[connectWS] connected');
-          wsRetryCount = 0;  // 接続成功でリトライカウントをリセット
+          wsRetryCount = 0;
+          ws.send(JSON.stringify({ action: 'getHistory' }));
         };
 
         ws.onmessage = (e) => handleIncoming(JSON.parse(e.data));
@@ -1092,20 +1093,20 @@
           console.log('[connectWS] retry in ' + delay + 'ms');
           setTimeout(connectWS, delay);
         };
-
-        loadHistory();
       } catch (err) {
         // TODO: エラー処理
         console.error('Error connecting to WebSocket:', err);
       }
     }
 
-    function loadHistory() {
-      // TODO 過去のメッセージを読み込む処理
-    }
-
     function handleIncoming(data) {
+      console.log('[handleIncoming]', data.type);
       if (data.type === 'message') addMessage(data, true);
+      if (data.type === 'history') {
+        const msgs = data.messages || [];
+        msgs.forEach(m => addMessage({ ...m, from: m.from || m.userId }, false));
+        if (msgs.length > 0) scrollToBottom(false);
+      }
       if (data.type === 'typing') showTyping(data.from);
     }
 

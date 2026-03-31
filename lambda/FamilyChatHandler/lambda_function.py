@@ -12,6 +12,7 @@ Environment variables (set in Lambda console):
   MESSAGES_TABLE     - DynamoDB table name for chat messages
   LINE_FUNCTION_NAME - Lambda function name for LINE notification
   ROOM_ID            - Chat room identifier (e.g. "family")
+  HISTORY_LIMIT      - Number of history messages to push on connect (default: 30)
   API_GW_ENDPOINT    - API Gateway Management endpoint
                        e.g. https://xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com/prod
 """
@@ -35,6 +36,7 @@ CONNECTIONS_TABLE  = os.environ["CONNECTIONS_TABLE"]   # e.g. "FamilyChatConnect
 MESSAGES_TABLE     = os.environ["MESSAGES_TABLE"]       # e.g. "FamilyChatMessages"
 LINE_FUNCTION_NAME = os.environ["LINE_FUNCTION_NAME"]  # e.g. "FamilyLineNotify"
 ROOM_ID            = os.environ.get("ROOM_ID", "family")
+HISTORY_LIMIT      = int(os.environ.get("HISTORY_LIMIT", "30"))  # 接続時に返す履歴件数
 API_GW_ENDPOINT    = os.environ["API_GW_ENDPOINT"]     # e.g. "https://xxx.execute-api.ap-northeast-1.amazonaws.com/prod"
 
 # ── AWS clients (reused across warm invocations) ─────────────────────────────
@@ -75,6 +77,8 @@ def lambda_handler(event: dict, context) -> dict:
             return handle_disconnect(connection_id)
         elif route == "sendMessage":
             return handle_send_message(event, connection_id)
+        elif route == "getHistory":
+            return handle_get_history(event, connection_id)
         else:
             return _ok()
     except Exception as exc:
@@ -114,10 +118,6 @@ def handle_connect(event: dict, connection_id: str) -> dict:
         }
     )
     logger.info("Connected: %s (userId=%s)", connection_id, user_id)
-
-    # Push unread messages accumulated while the client was offline
-    _push_unread_messages(connection_id, user_id)
-
     return _ok()
 
 
@@ -171,32 +171,37 @@ def handle_send_message(event: dict, connection_id: str) -> dict:
     return _ok()
 
 
-# ============================================================
-# Helper: push unread messages on reconnect
-# ============================================================
-
-def _push_unread_messages(connection_id: str, user_id: str) -> None:
+def handle_get_history(event: dict, context_connection_id: str) -> dict:
     """
-    Send the latest N messages to a freshly-connected client so the chat
-    history appears even after the page was closed.
-    Only the last 50 messages are fetched to keep latency low.
+    Send the latest HISTORY_LIMIT messages to a freshly-connected client.
+    Messages are pushed as a single "history" event in chronological order.
     """
     try:
         response = msg_table.query(
             KeyConditionExpression=Key("roomId").eq(ROOM_ID),
             ScanIndexForward=False,  # newest first
-            Limit=50,
+            Limit=HISTORY_LIMIT,
         )
         items = list(reversed(response.get("Items", [])))  # chronological order
         if not items:
+            logger.info("No history messages for room %s", ROOM_ID)
             return
 
-        payload = json.dumps({"type": "history", "messages": items}, ensure_ascii=False, default=str)
-        _send_to_connection(connection_id, payload)
-        logger.info("Pushed %d history messages to %s", len(items), connection_id)
+        payload = json.dumps(
+            {"type": "history", "messages": items, "limit": HISTORY_LIMIT},
+            ensure_ascii=False,
+            default=str,
+        )
+        _send_to_connection(context_connection_id, payload)
+        logger.info("Pushed %d history messages (limit=%d) to %s", len(items), HISTORY_LIMIT, context_connection_id)
     except Exception as exc:
-        logger.warning("Failed to push history to %s: %s", connection_id, exc)
+        logger.warning("Failed to push history to %s: %s", context_connection_id, exc)
+    return _ok()
 
+
+# ============================================================
+# Helper: send the latest HISTORY_LIMIT message
+# ============================================================
 
 def _send_to_connection(connection_id: str, payload: str) -> bool:
     """
