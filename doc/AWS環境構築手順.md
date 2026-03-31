@@ -155,6 +155,7 @@
         |`LINE_FUNCTION_NAME`|`FamilyLineNotify`|
         |`ROOM_ID`|`family`|
         |`API_GW_ENDPOINT`|`http`で始まり`/prod`で終わるAPI Gatewayのエンドポイント|
+        |`HISTORY_LIMIT`|`30`|
     - ライムアウト：`10秒`
 
 ### LINE通知ハンドラ
@@ -244,6 +245,7 @@
         - `$disconnect`
         - `$default`
         - `sendMessage`
+        - `getHistory`
     - ステージ名：`prod`
 - オーソライザを作成する
     - オーソライザ名：`FamilyChatAuthorizer`
