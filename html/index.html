@@ -1107,7 +1107,6 @@
         msgs.forEach(m => addMessage({ ...m, from: m.from || m.userId }, false));
         if (msgs.length > 0) scrollToBottom(false);
       }
-      if (data.type === 'typing') showTyping(data.from);
     }
 
     /* ============================================================
@@ -1176,9 +1175,6 @@
       row.appendChild(isSelf ? wrap : avatar);
       row.appendChild(isSelf ? avatar : wrap);
 
-      // タイプ中インジケーター削除
-      removeTyping();
-
       // スクロール判定
       const wasAtBottom = isAtBottom;
       container.appendChild(row);
@@ -1207,35 +1203,6 @@
       btn.classList.toggle('visible', !isAtBottom);
       if (isAtBottom) hideNewToast();
     });
-
-    /* ============================================================
-       TYPING INDICATOR
-       ============================================================ */
-    let typingTimer = null;
-    function showTyping(from) {
-      removeTyping();
-      const container = document.getElementById('messages');
-      const member = CONFIG.members[from] || {};
-      const row = document.createElement('div');
-      row.className = 'msg-row other';
-      row.id = 'typing-row';
-      row.innerHTML = `
-    <div class="avatar av-${member.role}" aria-hidden="true">${member.emoji || '👤'}</div>
-    <div class="typing-indicator">
-      <div class="typing-bubble">
-        <div class="typing-dot"></div>
-        <div class="typing-dot"></div>
-        <div class="typing-dot"></div>
-      </div>
-    </div>`;
-      container.appendChild(row);
-      if (isAtBottom) scrollToBottom(true);
-      typingTimer = setTimeout(removeTyping, 5000);
-    }
-    function removeTyping() {
-      clearTimeout(typingTimer);
-      document.getElementById('typing-row')?.remove();
-    }
 
     /* ============================================================
        TOAST / BADGE
@@ -1291,10 +1258,6 @@
       this.style.height = 'auto';
       this.style.height = Math.min(this.scrollHeight, 120) + 'px';
       sendBtn.disabled = this.value.trim() === '';
-      // タイピング通知
-      if (ws?.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'typing', from: CURRENT_USER_ID }));
-      }
     });
 
     input.addEventListener('keydown', function (e) {
