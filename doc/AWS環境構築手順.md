@@ -2,7 +2,7 @@
 
 ## S3
 
-- S3バケットを作成する
+- Webコンテンツ配信用のS3バケットを作成する
     - バケット名：一意な名称
     - パブリックアクセス：`すべてブロック`
 - 各種コンテンツファイルをバケットにアップロードする
@@ -10,6 +10,9 @@
         - タイプ：`システム定義`
         - キー：`Cache-Control`
         - 値：`no-cache`
+- 画像保存用のS3バケットを作成する
+    - バケット名：一意な名称
+    - パブリックアクセス：`すべてブロック`
 
 ### CloudFront
 
@@ -186,6 +189,9 @@
         |`ROOM_ID`|`family`|
         |`CHILD_CONNECTION_USER`|`child`|
         |`USERS_TABLE`|`FamilyChatUsers`|
+        |`IMAGES_BUCKET`|画像保存用バケットの名称|
+        |`IMAGE_EXPIRE_SECONDS`|`86400`|
+        |`LINE_CHANNEL_ACCESS_TOKEN`|LINE Developersから取得|
     - ライムアウト：`10秒`
 
 ### オーソライザ
