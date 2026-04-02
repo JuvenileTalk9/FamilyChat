@@ -39,10 +39,13 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # ── Environment variables ────────────────────────────────────────────────────
-LINE_CHANNEL_SECRET    = os.environ["LINE_CHANNEL_SECRET"]
+LINE_CHANNEL_SECRET       = os.environ["LINE_CHANNEL_SECRET"]
+LINE_CHANNEL_ACCESS_TOKEN = os.environ["LINE_CHANNEL_ACCESS_TOKEN"]  # 画像取得用
 CONNECTIONS_TABLE      = os.environ["CONNECTIONS_TABLE"]
 MESSAGES_TABLE         = os.environ["MESSAGES_TABLE"]
 USERS_TABLE            = os.environ.get("USERS_TABLE", "FamilyChatUsers")
+IMAGES_BUCKET          = os.environ.get("IMAGES_BUCKET", "")
+IMAGE_EXPIRE_SECONDS   = int(os.environ.get("IMAGE_EXPIRE_SECONDS", "86400"))  # 24時間
 API_GW_ENDPOINT        = os.environ["API_GW_ENDPOINT"]   # https://xxx.amazonaws.com/prod
 ROOM_ID                = os.environ.get("ROOM_ID", "family")
 CHILD_CONNECTION_USER  = os.environ.get("CHILD_CONNECTION_USER", "child")
@@ -148,17 +151,29 @@ def _handle_message(line_event: dict) -> None:
                     source.get("groupId", "unknown"), sender_line_uid)
 
     if msg_type == "text":
-        text     = msg_obj.get("text", "").strip()
-        is_stamp = False
+        text      = msg_obj.get("text", "").strip()
+        is_stamp  = False
+        is_image  = False
+        image_url = ""
     elif msg_type == "sticker":
-        # LINEスタンプは絵文字として代替表示
-        text     = _sticker_to_emoji(msg_obj)
-        is_stamp = True
+        text      = _sticker_to_emoji(msg_obj)
+        is_stamp  = True
+        is_image  = False
+        image_url = ""
+    elif msg_type == "image":
+        line_msg_id = msg_obj.get("id", "")
+        image_url   = _fetch_line_image_to_s3(line_msg_id, sender_line_uid) or ""
+        if not image_url:
+            logger.warning("Failed to process image from %s", sender_line_uid)
+            return
+        text     = ""
+        is_stamp = False
+        is_image = True
     else:
         logger.info("Unsupported message type: %s", msg_type)
         return
 
-    if not text:
+    if not is_image and not text:
         return
 
     sender_id  = _resolve_user_id(sender_line_uid)
@@ -172,6 +187,8 @@ def _handle_message(line_event: dict) -> None:
         "userId":    sender_id,
         "text":      text,
         "isStamp":   is_stamp,
+        "isImage":   is_image,
+        "imageUrl":  image_url,
     }
 
     # 1. DynamoDB に保存
@@ -297,6 +314,39 @@ def _verify_signature(body_bytes: bytes, signature: str) -> bool:
 # ============================================================
 # Helpers
 # ============================================================
+
+def _fetch_line_image_to_s3(message_id: str, sender_line_uid: str):
+    # LINE Content API から画像を取得して S3 にアップロードし署名付きURLを返す
+    if not IMAGES_BUCKET:
+        logger.warning('IMAGES_BUCKET not configured, skipping image')
+        return None
+    if not message_id:
+        return None
+    try:
+        content_url = f'https://api-data.line.me/v2/bot/message/{message_id}/content'
+        req = Request(content_url, headers={'Authorization': f'Bearer {LINE_CHANNEL_ACCESS_TOKEN}'})
+        with urlopen(req, timeout=15) as resp:
+            image_bytes = resp.read()
+            content_type = resp.headers.get('Content-Type', 'image/jpeg')
+        ext = 'jpg' if 'jpeg' in content_type else content_type.split('/')[-1]
+        s3_key = f'images/{sender_line_uid[:8]}/{message_id}.{ext}'
+        s3_client.put_object(
+            Bucket=IMAGES_BUCKET,
+            Key=s3_key,
+            Body=image_bytes,
+            ContentType=content_type,
+        )
+        logger.info('Image uploaded to s3://%s/%s', IMAGES_BUCKET, s3_key)
+        presigned_url = s3_client.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': IMAGES_BUCKET, 'Key': s3_key},
+            ExpiresIn=IMAGE_EXPIRE_SECONDS,
+        )
+        return presigned_url
+    except Exception as exc:
+        logger.error('Failed to fetch/upload image %s: %s', message_id, exc)
+        return None
+
 
 def _sticker_to_emoji(msg_obj: dict) -> str:
     """
